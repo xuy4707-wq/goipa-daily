@@ -346,7 +346,7 @@ function shotsHtml(m){
   } else {
     note = '截图来自 App Store「'+esc(m.nm)+'」（'+esc(m.ar||'')+'）· '+esc(m.cc||'')+'区匹配 '+m.id+' · 破解版基于此原版修改';
   }
-  return '<div class="shots">' + m.sh.slice(0,8).map(u => '<img loading="lazy" src="'+esc(u)+'" onerror="this.style.display='none'" alt="截图">').join('') + '</div>'
+  return '<div class="shots">' + m.sh.slice(0,8).map(u => '<img loading="lazy" src="'+esc(u)+'" onerror="this.remove()" alt="截图">').join('') + '</div>'
     + '<div class="shots-note">'+note+'</div>';
 }
 
