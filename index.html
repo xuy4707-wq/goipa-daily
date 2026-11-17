@@ -119,6 +119,32 @@ footer{margin-top:40px;text-align:center;font-size:11.5px;color:var(--faint)}
 .m-empty-link{font-size:12.5px;color:var(--dim);padding:6px 2px}
 .m-empty-link a{color:var(--acc2)}
 @media (max-width:640px){h1{font-size:21px}.grid{grid-template-columns:1fr}.shots img{height:300px}.m-body{max-height:calc(100vh - 200px)}}
+
+/* ── 收藏功能 ── */
+.fav-btn{flex-shrink:0;width:30px;height:30px;border-radius:9px;border:1px solid var(--line);
+  background:var(--panel2);color:#6b7280;font-size:15px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:.15s;padding:0}
+.fav-btn:hover{color:#fbbf24;border-color:rgba(251,191,36,.5);transform:scale(1.1)}
+.fav-btn.on{color:#fbbf24;background:rgba(251,191,36,.12);border-color:rgba(251,191,36,.55);
+  text-shadow:0 0 12px rgba(251,191,36,.55)}
+.card.faved{border-color:rgba(251,191,36,.35);box-shadow:0 0 0 1px rgba(251,191,36,.08)}
+.pill.favpill{color:#fbbf24}
+.pill.favpill.on{background:linear-gradient(135deg,#f59e0b,#fbbf24);border-color:#f59e0b;color:#1a1305;font-weight:700}
+.tool-btn{padding:7px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);
+  color:var(--dim);font-size:12.5px;cursor:pointer;transition:.15s;white-space:nowrap}
+.tool-btn:hover{color:var(--txt);border-color:#3a4157}
+#toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%) translateY(20px);
+  background:var(--panel2);border:1px solid rgba(251,191,36,.4);color:#fbbf24;
+  padding:10px 20px;border-radius:12px;font-size:13px;opacity:0;pointer-events:none;
+  transition:.25s;z-index:300;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.m-fav{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;border-radius:10px;font-size:13px;
+  cursor:pointer;border:1px solid rgba(251,191,36,.45);background:rgba(251,191,36,.1);color:#fbbf24;
+  font-weight:600;transition:.15s}
+.m-fav:hover{filter:brightness(1.15)}
+.m-fav.not{border-color:var(--line);background:var(--panel);color:var(--dim);font-weight:400}
+.fav-empty{text-align:center;padding:60px 20px;color:var(--faint);display:none}
+.fav-empty .big{font-size:40px;margin-bottom:10px}
 </style>
 </head>
 <body>
@@ -127,7 +153,7 @@ footer{margin-top:40px;text-align:center;font-size:11.5px;color:var(--faint)}
 <header>
   <div class="kicker">GOIPA SOURCE · DAILY DIGEST</div>
   <h1>今日全部更新 <span class="date">2026-11-16</span></h1>
-  <div class="sub">共 <b>435</b> 个应用/游戏（已去重） · 点击卡片查看<b>介绍与官方截图</b> · 来源 <b>c.goipa.top/appstore</b></div>
+  <div class="sub">共 <b>435</b> 个应用/游戏（已去重） · 点击卡片查看<b>介绍与官方截图</b> · 点右上 <b style="color:#fbbf24">⭐</b> 收藏 · 来源 <b>c.goipa.top/appstore</b></div>
   <div class="chips" id="chips"></div>
 </header>
 
@@ -138,11 +164,17 @@ footer{margin-top:40px;text-align:center;font-size:11.5px;color:var(--faint)}
     <button class="clear" id="clear">✕</button>
   </div>
   <div class="pills" id="pills"></div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <button class="tool-btn" id="btn-export" title="导出收藏为JSON文件/剪贴板">⇪ 导出收藏</button>
+    <button class="tool-btn" id="btn-import" title="粘贴JSON导入收藏">⇩ 导入收藏</button>
+  </div>
 </div></div>
 
 <div class="result-info" id="info"></div>
 <div class="grid" id="grid"></div>
 <div class="empty" id="empty"><div class="big">🔍</div>没有匹配的应用，换个关键词试试</div>
+<div class="fav-empty" id="fav-empty"><div class="big">⭐</div>还没有收藏 · 点击应用卡片右上角的 ⭐ 即可收藏<br>收藏永久保存在本机浏览器，换设备用「导出/导入」迁移</div>
+<div id="toast"></div>
 
 <footer>goipa 每日更新清单 · 仅供学习交流 · 请于 24 小时内删除</footer>
 </div>
@@ -161,7 +193,22 @@ const hi = (s, kw) => { s = esc(s); if (!kw) return s;
   return s.replace(new RegExp(kw.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'gi'), m => '<mark>'+m+'</mark>'); };
 const fmtSize = b => { const n = parseInt(b)||0; return n>1048576 ? (n/1048576).toFixed(1)+' MB' : n>1024 ? Math.round(n/1024)+' KB' : n? n+' B' : ''; };
 
-const state = { kw:'', cat:'all' };
+const state = { kw:'', cat:'all', view:'today' };
+/* ── 收藏基础设施 ── */
+const FAV_KEY = 'goipa_favs_v1';
+let FAVS = {};
+try { FAVS = JSON.parse(localStorage.getItem(FAV_KEY) || '{}'); } catch(e){ FAVS = {}; }
+function saveFavs(){ try { localStorage.setItem(FAV_KEY, JSON.stringify(FAVS)); } catch(e){ toastMsg('⚠ 存储失败(浏览器容量满?) 请立即导出备份'); } }
+function toastMsg(m){ const t = document.getElementById('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(()=>t.classList.remove('show'), 1600); }
+const UID = {}; let uidSeq = 0;
+function snap(it){ return JSON.parse(JSON.stringify(it)); }
+function favCount(){ return Object.keys(FAVS).length; }
+function toggleFav(it){
+  if (!it) return;
+  if (FAVS[it.n]) { delete FAVS[it.n]; toastMsg('已取消收藏'); }
+  else { FAVS[it.n] = snap(it); toastMsg('已收藏 ✨'); }
+  saveFavs();
+}
 const grid = document.getElementById('grid');
 const info = document.getElementById('info');
 const emptyEl = document.getElementById('empty');
@@ -176,34 +223,47 @@ function renderChips(){
 
 function renderPills(){
   const p = document.getElementById('pills');
-  p.innerHTML = '<div class="pill'+(state.cat==='all'?' on':'')+'" data-cat="all">全部 <small>'+DATA.length+'</small></div>'
-    + CATS.map(c => '<div class="pill'+(state.cat===c.id?' on':'')+'" data-cat="'+c.id+'">'+c.label+' <small>'+c.count+'</small></div>').join('');
+  p.innerHTML = '<div class="pill favpill'+(state.view==='favs'?' on':'')+'" data-view="favs">★ 我的收藏 <small>'+favCount()+'</small></div>'
+    + '<div class="pill'+(state.view!=='favs'&&state.cat==='all'?' on':'')+'" data-cat="all">全部 <small>'+DATA.length+'</small></div>'
+    + CATS.map(c => '<div class="pill'+(state.view!=='favs'&&state.cat===c.id?' on':'')+'" data-cat="'+c.id+'">'+c.label+' <small>'+c.count+'</small></div>').join('');
   p.querySelectorAll('.pill').forEach(el => el.onclick = () => {
-    state.cat = el.dataset.cat; renderPills(); render();
+    if (el.dataset.view){ state.view = 'favs'; }
+    else { state.view = 'today'; state.cat = el.dataset.cat; }
+    renderPills(); render();
   });
 }
 
 function render(){
   const kw = state.kw.trim().toLowerCase();
-  const list = DATA.map((it,i)=>({it,i})).filter(({it}) =>
-    (state.cat==='all' || it.t===state.cat) &&
+  const src = state.view==='favs' ? Object.values(FAVS) : DATA;
+  const list = src.filter(it =>
+    (state.view==='favs' || state.cat==='all' || it.t===state.cat) &&
     (!kw || (it.n+' '+it.v+' '+it.d+' '+(it.ld||'')).toLowerCase().includes(kw)));
-  grid.innerHTML = list.map(({it,i}) => {
+  grid.innerHTML = list.map(it => {
     const cc = catColor(it.t);
-    return '<div class="card" style="--cc:'+cc+'" data-i="'+i+'">'
+    const uid = 'u'+(++uidSeq); UID[uid] = it;
+    const favd = !!FAVS[it.n];
+    return '<div class="card'+(favd?' faved':'')+'" style="--cc:'+cc+'" data-uid="'+uid+'">'
       + '<div class="card-top"><div class="card-name">'+hi(it.n, kw)+'</div>'
+      + '<button class="fav-btn'+(favd?' on':'')+'" data-fav-uid="'+uid+'" title="'+(favd?'取消收藏':'收藏')+'">★</button>'
       + '<span class="card-ver">v'+hi(it.v, kw)+'</span></div>'
       + '<div class="card-meta"><span><span class="tag">'+CAT_MAP[it.t]+'</span>'+(it.c?' · '+esc(it.c):'')+'</span>'+(fmtSize(it.s)?'<span>'+fmtSize(it.s)+'</span>':'')+'</div>'
       + '<div class="card-desc">'+hi(it.d, kw)+'</div>'
       + '<div class="card-open"><span>▸ 点击查看详情</span>'+(it.m?'<span class="has-m">📷 有官方截图</span>':'')+'</div></div>';
   }).join('');
-  emptyEl.style.display = list.length ? 'none' : 'block';
-  info.innerHTML = '显示 <b>'+list.length+'</b> / '+DATA.length+' 个' + (kw ? ' · 关键词「'+esc(state.kw)+'」' : '');
+  const noResult = list.length === 0;
+  emptyEl.style.display = (noResult && state.view!=='favs') ? 'block' : 'none';
+  document.getElementById('fav-empty').style.display = (noResult && state.view==='favs' && !kw) ? 'block' : 'none';
+  info.innerHTML = state.view==='favs'
+    ? '★ 我的收藏 · 显示 <b>'+list.length+'</b> / '+favCount()+' 个' + (kw ? ' · 关键词「'+esc(state.kw)+'」' : '')
+    : '显示 <b>'+list.length+'</b> / '+DATA.length+' 个' + (kw ? ' · 关键词「'+esc(state.kw)+'」' : '');
 }
 
 grid.addEventListener('click', e => {
+  const fb = e.target.closest('.fav-btn');
+  if (fb){ const it = UID[fb.dataset.favUid]; toggleFav(it); renderPills(); render(); if (curIt) syncModalFav(); return; }
   const c = e.target.closest('.card');
-  if (c) openDetail(parseInt(c.dataset.i));
+  if (c) openDetail(UID[c.dataset.uid]);
 });
 
 const q = document.getElementById('q');
@@ -252,7 +312,29 @@ function cleanName(n){
 /* ── 详情弹窗 ── */
 const overlay = document.getElementById('overlay');
 const modal = document.getElementById('modal');
-function closeDetail(){ overlay.classList.remove('show'); modal.innerHTML=''; }
+function closeDetail(){ overlay.classList.remove('show'); modal.innerHTML=''; curIt = null; }
+let curIt = null;
+function favBtnHtml(it){
+  const f = FAVS[it.n];
+  if (!f) return '<button class="m-fav not" id="m-fav">☆ 收藏这个应用</button>';
+  if (f.v !== it.v) return '<button class="m-fav" id="m-fav">★ 已收藏 v'+esc(f.v)+' · 点此更新到 v'+esc(it.v)+'</button>';
+  return '<button class="m-fav" id="m-fav">★ 已收藏 ✓（点击取消）</button>';
+}
+function syncModalFav(){
+  if (!curIt) return;
+  const old = document.getElementById('m-fav');
+  if (old) old.outerHTML = favBtnHtml(curIt);
+  const nb = document.getElementById('m-fav');
+  if (nb) nb.onclick = modalFavAction;
+}
+function modalFavAction(){
+  if (!curIt) return;
+  const f = FAVS[curIt.n];
+  if (!f){ toggleFav(curIt); }
+  else if (f.v !== curIt.v){ FAVS[curIt.n] = snap(curIt); saveFavs(); toastMsg('收藏已更新 → v'+curIt.v); }
+  else { toggleFav(curIt); }
+  renderPills(); render(); syncModalFav();
+}
 overlay.addEventListener('click', e => { if (e.target === overlay) closeDetail(); });
 
 function shotsHtml(m){
@@ -261,6 +343,7 @@ function shotsHtml(m){
 }
 
 function renderModal(it, idx){
+  curIt = it;
   const cc = catColor(it.t);
   const sz = fmtSize(it.s);
   modal.innerHTML =
@@ -282,10 +365,12 @@ function renderModal(it, idx){
     + '<div class="m-sec"><h3>官方截图（App Store 原版）</h3><div id="shots-box">'
     + (it.m ? shotsHtml(it.m) : '<div class="shot-loading"><span class="spin"></span>正在搜索原版应用截图…</div>')
     + '</div></div>'
-    + '<div class="m-sec"><h3>相关链接</h3><div class="m-links" id="m-links"></div></div>'
+    + '<div class="m-sec"><h3>相关链接</h3><div class="m-links" id="m-links">'+favBtnHtml(it)+'</div></div>'
     + '</div>';
   overlay.classList.add('show');
   document.getElementById('mclose').onclick = closeDetail;
+  const favBtnEl = document.getElementById('m-fav');
+  if (favBtnEl) favBtnEl.onclick = modalFavAction;
   const iconEl = document.getElementById('m-icon');
   const linksEl = document.getElementById('m-links');
   if (it.dl) {
@@ -324,7 +409,32 @@ function renderModal(it, idx){
   }
 }
 
-function openDetail(i){ const it = DATA[i]; if (it) renderModal(it, i); }
+function openDetail(it){ if (it) renderModal(it); }
+
+/* ── 导出 / 导入 ── */
+document.getElementById('btn-export').onclick = () => {
+  const n = favCount();
+  if (!n){ toastMsg('还没有收藏，无内容可导出'); return; }
+  const txt = JSON.stringify(FAVS);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([txt], {type:'application/json'}));
+  a.download = 'goipa收藏备份_'+new Date().toISOString().slice(0,10)+'.json';
+  a.click();
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(()=>toastMsg('已导出 '+n+' 条（文件+剪贴板）')).catch(()=>toastMsg('已导出 '+n+' 条（下载文件）'));
+  } else toastMsg('已导出 '+n+' 条（下载文件）');
+};
+document.getElementById('btn-import').onclick = () => {
+  const s = prompt('粘贴之前导出的收藏JSON（手机/电脑同步）：');
+  if (!s) return;
+  try {
+    const d = JSON.parse(s.trim());
+    let cnt = 0;
+    for (const k in d){ if (d[k] && d[k].n){ FAVS[d[k].n] = d[k]; cnt++; } }
+    saveFavs(); renderPills(); render();
+    toastMsg('已导入 '+cnt+' 条收藏');
+  } catch(e){ alert('JSON 解析失败，请检查粘贴内容是否完整'); }
+};
 
 renderChips(); renderPills(); render();
 </script>
